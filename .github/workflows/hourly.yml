@@ -20,12 +20,12 @@ jobs:
 
       - run: python collector.py Timberwolves
       - run: python collector.py Wild
-
-      - name: Commit database
+      
+      - name: Commit data
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email "bgithub-actions[bot]@users.noreply.github.com"
-          git add pulse.db
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pulse.csv
           git commit -m "update pulse data" || echo "no changes"
           git push
 
