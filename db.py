@@ -1,29 +1,30 @@
-import sqlite3
 import pandas as pd
 from datetime import datetime
+import os
 
-conn = sqlite3.connect("pulse.db", check_same_thread=False)
-
-conn.execute("""
-CREATE TABLE IF NOT EXISTS sentiment (
-team TEXT,
-timestamp TEXT,
-sentiment REAL,
-mentions INTEGER
-)
-""")
+FILE = "pulse.csv"
 
 def save_row(team, sentiment, mentions):
-    conn.execute(
-        "INSERT INTO sentiment VALUES (?, ?, ?, ?)",
-        (team, datetime.utcnow(), sentiment, mentions)
-    )
-    conn.commit()
+    row = pd.DataFrame([{
+        "team": team,
+        "timestamp": datetime.utcnow(),
+        "sentiment": sentiment,
+        "mentions": mentions
+    }])
+
+    if os.path.exists(FILE):
+        df = pd.read_csv(FILE)
+        df = pd.concat([df, row], ignore_index=True)
+    else:
+        df = row
+
+    df.to_csv(FILE, index=False)
+
 
 def get_data(team):
-    df = pd.read_sql_query(
-        "SELECT * FROM sentiment WHERE team=? ORDER BY timestamp",
-        conn,
-        params=(team,)
-    )
+    if not os.path.exists(FILE):
+        return pd.DataFrame()
+
+    df = pd.read_csv(FILE)
+    df = df[df["team"] == team]
     return df
