@@ -23,10 +23,12 @@ jobs:
 
       - name: Commit database
         run: |
-          git config user.name "bot"
-          git config user.email "bot@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "bgithub-actions[bot]@users.noreply.github.com"
           git add pulse.db
           git commit -m "update pulse data" || echo "no changes"
           git push
+
+          
 
       
