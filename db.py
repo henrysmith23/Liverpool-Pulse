@@ -1,30 +1,38 @@
+import json
 import pandas as pd
 from datetime import datetime
 import os
 
-FILE = "pulse.csv"
+FILE = "data.json"
 
 def save_row(team, sentiment, mentions):
-    row = pd.DataFrame([{
+
+    row = {
         "team": team,
-        "timestamp": datetime.utcnow(),
+        "timestamp": datetime.utcnow().isoformat(),
         "sentiment": sentiment,
         "mentions": mentions
-    }])
+    }
 
     if os.path.exists(FILE):
-        df = pd.read_csv(FILE)
-        df = pd.concat([df, row], ignore_index=True)
+        with open(FILE, "r") as f:
+            data = json.load(f)
     else:
-        df = row
+        data = []
 
-    df.to_csv(FILE, index=False)
+    data.append(row)
 
+    with open(FILE, "w") as f:
+        json.dump(data, f)
 
 def get_data(team):
     if not os.path.exists(FILE):
         return pd.DataFrame()
 
-    df = pd.read_csv(FILE)
+    with open(FILE, "r") as f:
+        data = json.load(f)
+
+    df = pd.DataFrame(data)
     df = df[df["team"] == team]
+
     return df
