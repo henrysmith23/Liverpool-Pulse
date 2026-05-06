@@ -54,11 +54,19 @@ def fetch_reddit_scrape(team):
 def fetch_all(team):
     posts = []
 
-    for kw in KEYWORDS[team]:
-        posts += fetch_x_posts(kw)
+    try:
+        url = RSS_FEEDS[team]
+        res = requests.get(url, headers=HEADERS, timeout=10)
+        soup = BeautifulSoup(res.content, "xml")
+        items = soup.find_all("item")
 
-    posts += fetch_rss(team)
-    posts += fetch_reddit_scrape(team)
+        for i in items[:30]:
+            title = i.title.text
+            if any(k.lower() in title.lower() for k in KEYWORDS[team]):
+                posts.append(title)
+
+    except Exception as e:
+        print("RSS failed:", e)
 
     return posts
 
