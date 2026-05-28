@@ -5,83 +5,76 @@ from db import save_row
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-KEYWORDS = {
-    "Timberwolves": ["Minnesota Timberwolves", "Anthony Edwards", "Gobert"],
-    "Wild": ["Minnesota Wild", "Kaprizov", "Boldy"]
-}
-
-RSS_FEEDS = {
-    "Timberwolves": "https://www.espn.com/espn/rss/nba/news",
-    "Wild": "https://www.espn.com/espn/rss/nhl/news"
-}
-
-# ---------- X SCRAPE ----------
-def fetch_x_posts(keyword):
-    try:
-        url = f"https://nitter.net/search?f=tweets&q={keyword.replace(' ', '%20')}"
-        res = requests.get(url, headers=HEADERS, timeout=10)
-        soup = BeautifulSoup(res.text, "html.parser")
-        tweets = soup.find_all("div", class_="tweet-content")
-        return [t.get_text(strip=True) for t in tweets[:15]]
-    except:
-        return []
-
-# ---------- RSS NEWS ----------
-def fetch_rss(team):
-    try:
-        url = RSS_FEEDS[team]
-        res = requests.get(url, headers=HEADERS, timeout=10)
-        soup = BeautifulSoup(res.content, "xml")
-        items = soup.find_all("item")
-        return [i.title.text for i in items[:15]]
-    except:
-        return []
-
-# ---------- REDDIT (no API) ----------
-def fetch_reddit_scrape(team):
-    try:
-        url = f"https://www.reddit.com/r/{'nba' if team=='Timberwolves' else 'wildhockey'}/hot.json"
-        res = requests.get(url, headers=HEADERS, timeout=10)
-        data = res.json()
-        return [
-            c["data"]["title"]
-            for c in data["data"]["children"][:15]
-        ]
-    except:
-        return []
-
-# ---------- COMBINE ----------
-def fetch_all(team):
+# ---------- TIMBERWOLVES (AIRBNB LINK) ----------
+def fetch_wolves():
     posts = []
 
     try:
-        url = RSS_FEEDS[team]
-        res = requests.get(url, headers=HEADERS, timeout=10)
-        soup = BeautifulSoup(res.content, "xml")
-        items = soup.find_all("item")
+        url = "https://www.airbnb.com/l/JqUALnWT?s=67&unique_share_id=fdf59037-3af0-4290-a266-28a2785a0e18"
 
-        for i in items[:30]:
-            title = i.title.text
-            if any(k.lower() in title.lower() for k in KEYWORDS[team]):
-                posts.append(title)
+        res = requests.get(url, headers=HEADERS, timeout=15)
+
+        soup = BeautifulSoup(res.text, "html.parser")
+
+        text = soup.get_text(" ", strip=True)
+
+        posts.append(text[:5000])
 
     except Exception as e:
-        print("RSS failed:", e)
+        print("wolves source failed:", e)
 
     return posts
 
+
+# ---------- WILD (FORUM) ----------
+def fetch_wild():
+    posts = []
+
+    try:
+        url = "https://hockeywilderness.com/forums/forum/2-minnesota-wild-talk/"
+
+        res = requests.get(url, headers=HEADERS, timeout=15)
+
+        soup = BeautifulSoup(res.text, "html.parser")
+
+        titles = soup.find_all(["h2", "h3", "a"])
+
+        for t in titles[:40]:
+            txt = t.get_text(strip=True)
+
+            if len(txt) > 10:
+                posts.append(txt)
+
+    except Exception as e:
+        print("wild source failed:", e)
+
+    return posts
+
+
 # ---------- RUN ----------
 def run(team):
-    posts = fetch_all(team)
 
-    if len(posts) < 5:
-        save_row(team, 50, len(posts))
+    if team == "Timberwolves":
+        posts = fetch_wolves()
+
+    elif team == "Wild":
+        posts = fetch_wild()
+
+    else:
+        posts = []
+
+    print("POST COUNT:", len(posts))
+
+    if len(posts) == 0:
+        save_row(team, 50, 0)
         return
 
     scores = [score_text(p) for p in posts]
+
     avg = sum(scores) / len(scores)
 
     save_row(team, avg, len(posts))
+
 
 if __name__ == "__main__":
     import sys
