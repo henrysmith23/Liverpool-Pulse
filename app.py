@@ -1,23 +1,18 @@
-import streamlit as st
-import pandas as pd
-from db import get_data
+import json
+import os
 
-st.set_page_config(page_title="Wild/Wolves Pulse", layout="wide")
+def load_latest_post():
+    if os.path.exists("latest_post.json"):
+        with open("latest_post.json", "r") as f:
+            return json.load(f)
+    return None
 
-st.title("Wild/Wolves Pulse")
 
-team = st.radio("Select Team", ["Timberwolves", "Wild"])
+latest = load_latest_post()
 
-data = get_data(team)
+if latest:
+    st.subheader("Latest Post")
+    st.write(latest["text"])
 
-if data.empty:
-    st.warning("No data yet. Wait for first hourly run.")
-else:
-    st.metric("Current Sentiment (0-100)", round(data["sentiment"].iloc[-1], 1))
-    st.metric("Mentions (Last Hour)", int(data["mentions"].iloc[-1]))
-
-    st.subheader("Sentiment")
-    st.line_chart(data.set_index("timestamp")[["sentiment"]])
-
-    st.subheader("Mentions")
-    st.line_chart(data.set_index("timestamp")[["mentions"]])
+    st.subheader("Latest Post Sentiment")
+    st.write(f"{latest['score']:.1f} / 100")
