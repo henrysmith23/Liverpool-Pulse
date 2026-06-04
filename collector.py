@@ -12,13 +12,17 @@ THREAD_URL = "https://anfield.freeforums.net/thread/755/liverpool-season-iraola-
 
 SEEN_FILE = "seen_posts.json"
 LAST_RUN_FILE = "last_run.json"
+LATEST_POST_FILE = "latest_post.json"
 
 
-# ---------------- LOAD HELPERS ----------------
+# ---------------- HELPERS ----------------
 def load_json(path, default):
     if os.path.exists(path):
-        with open(path, "r") as f:
-            return json.load(f)
+        try:
+            with open(path, "r") as f:
+                return json.load(f)
+        except:
+            return default
     return default
 
 
@@ -36,29 +40,33 @@ def fetch_posts():
 
     for article in soup.find_all("article"):
         try:
-            post_id_tag = article.find_parent("td")
-            post_div = article.find("div", class_="message")
+            wrapper = article.find_parent("td")
 
-            if not post_div:
+            if not wrapper:
                 continue
 
-            text = post_div.get_text(strip=True)
+            post_id_raw = wrapper.get("id", "")
+            post_id = post_id_raw.replace("post-", "") if "post-" in post_id_raw else None
 
-            wrapper = article.find_parent("td")
-            post_id = wrapper.get("id", "")
-            post_id = post_id.replace("post-", "") if "post-" in post_id else None
+            msg = article.find("div", class_="message")
+            if not msg:
+                continue
+            text = msg.get_text(strip=True)
 
-            timestamp_tag = article.find("abbr", class_="o-timestamp")
-            timestamp = int(timestamp_tag["data-timestamp"]) if timestamp_tag else None
+            ts_tag = article.find("abbr", class_="o-timestamp")
+            if not ts_tag:
+                continue
+
+            timestamp = int(ts_tag.get("data-timestamp", 0))
 
             if post_id and timestamp and text:
                 posts.append({
-                    "id": post_id,
+                    "id": str(post_id),
                     "timestamp": timestamp,
                     "text": text
                 })
 
-        except:
+        except Exception as e:
             continue
 
     return posts
@@ -66,23 +74,34 @@ def fetch_posts():
 
 # ---------------- RUN ----------------
 def run():
+
     posts = fetch_posts()
+
+    print("TOTAL POSTS FOUND:", len(posts))
 
     seen = set(load_json(SEEN_FILE, []))
     last_run = load_json(LAST_RUN_FILE, 0)
 
+    # FIX: normalize timestamp to ms
+    if last_run < 10**12:
+        last_run = last_run * 1000
+
     new_posts = [
         p for p in posts
-        if p["id"] not in seen and p["timestamp"] > last_run
+        if p["id"] not in seen and int(p["timestamp"]) > int(last_run)
     ]
 
-    print("TOTAL POSTS:", len(posts))
-    print("NEW POSTS:", len(new_posts))
+    print("NEW POSTS FOUND:", len(new_posts))
+
+    # ALWAYS update last run time even if empty
+    now_ts = int(datetime.utcnow().timestamp() * 1000)
 
     if not new_posts:
         save_row("Liverpool", 50, 0)
+        save_json(LAST_RUN_FILE, now_ts)
         return
 
+    # sentiment calculation
     scores = [score_text(p["text"]) for p in new_posts]
     avg = sum(scores) / len(scores)
 
@@ -90,13 +109,14 @@ def run():
 
     # update tracking
     seen.update([p["id"] for p in new_posts])
+
     save_json(SEEN_FILE, list(seen))
-    save_json(LAST_RUN_FILE, max(p["timestamp"] for p in new_posts))
+    save_json(LAST_RUN_FILE, now_ts)
 
     save_row("Liverpool", avg, len(new_posts))
 
-    # store latest post for dashboard
-    save_json("latest_post.json", {
+    # ALWAYS create latest post file
+    save_json(LATEST_POST_FILE, {
         "text": latest["text"],
         "score": score_text(latest["text"]),
         "timestamp": latest["timestamp"]
