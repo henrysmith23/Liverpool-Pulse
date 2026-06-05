@@ -1,12 +1,13 @@
-import requests
+# ABOUTME: Scrapes the latest posts from the Liverpool forum thread using Playwright.
+# ABOUTME: Calculates sentiment scores and saves results for the Streamlit dashboard.
+
+from playwright.sync_api import sync_playwright
 from bs4 import BeautifulSoup
 import json
 import os
 from datetime import datetime
 from sentiment import score_text
 from db import save_row
-
-HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 THREAD_URL = "https://anfield.freeforums.net/thread/755/liverpool-season-iraola-officially-confirmed"
 
@@ -32,12 +33,55 @@ def save_json(path, data):
 
 
 # ---------------- SCRAPE ----------------
-def get_last_page_number():
-    res = requests.get(THREAD_URL, headers=HEADERS, timeout=15)
-    soup = BeautifulSoup(res.text, "html.parser")
+def get_page_html(url):
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            viewport={"width": 1920, "height": 1080}
+        )
+        page = context.new_page()
 
-    pagination = soup.find("ul", class_="ui-pagination")
+        page.goto(url, wait_until="domcontentloaded", timeout=60000)
+        page.wait_for_timeout(10000)
+
+        html = page.content()
+        title = page.title()
+
+        print(f"Page title: {title}")
+        print(f"HTML length: {len(html)}")
+
+        browser.close()
+
+    return html
+
+
+def get_last_page_number():
+    html = get_page_html(THREAD_URL)
+    soup = BeautifulSoup(html, "html.parser")
+
+    # Try multiple pagination selectors common on ProBoards
+    for selector in ["ul.ui-pagination", "div.pagination", "ul.pagination", "nav.pagination"]:
+        pagination = soup.select_one(selector)
+        if pagination:
+            break
+
     if not pagination:
+        # Fallback: look for any element with page numbers as links
+        import re
+        page_links = soup.find_all("a", href=re.compile(r"\?page=\d+"))
+        if page_links:
+            max_page = 1
+            for link in page_links:
+                match = re.search(r"\?page=(\d+)", link.get("href", ""))
+                if match:
+                    num = int(match.group(1))
+                    if num > max_page:
+                        max_page = num
+            print(f"Found last page via href scan: {max_page}")
+            return max_page
+
+        print("WARNING: No pagination found, defaulting to page 1")
         return 1
 
     page_links = pagination.find_all("a")
@@ -50,6 +94,7 @@ def get_last_page_number():
         except ValueError:
             continue
 
+    print(f"Found last page: {max_page}")
     return max_page
 
 
@@ -58,48 +103,74 @@ def fetch_posts():
     url = f"{THREAD_URL}?page={last_page}"
     print(f"Fetching page {last_page}: {url}")
 
-    res = requests.get(url, headers=HEADERS, timeout=15)
-    soup = BeautifulSoup(res.text, "html.parser")
+    html = get_page_html(url)
+    soup = BeautifulSoup(html, "html.parser")
 
     posts = []
 
-    for article in soup.find_all("article"):
-        try:
-            wrapper = article.find_parent("td")
+    # Strategy 1: ProBoards uses <tr> with class "post" or "item"
+    post_rows = soup.select("tr.item.post")
+    if not post_rows:
+        post_rows = soup.select("tr.post")
+    if not post_rows:
+        post_rows = soup.select("div.post")
+    if not post_rows:
+        # Strategy 2: look for elements with data-post-id
+        post_rows = soup.find_all(attrs={"data-post-id": True})
 
-            if not wrapper:
+    print(f"Post containers found (strategy 1/2): {len(post_rows)}")
+
+    if post_rows:
+        for row in post_rows:
+            try:
+                post_id = row.get("data-post-id") or row.get("id", "").replace("post-", "")
+                if not post_id:
+                    continue
+
+                # Find message content
+                msg = row.select_one(".message, .post-body, .content, .post_content")
+                if not msg:
+                    msg = row.find("div", class_=lambda c: c and "message" in c.lower()) if row.find("div") else None
+                if not msg:
+                    continue
+                text = msg.get_text(strip=True)
+
+                # Find timestamp
+                ts_tag = row.select_one("abbr[data-timestamp], time[data-timestamp], span[data-timestamp]")
+                if not ts_tag:
+                    ts_tag = row.find(attrs={"data-timestamp": True})
+
+                timestamp = 0
+                if ts_tag:
+                    timestamp = int(ts_tag.get("data-timestamp", 0))
+
+                if post_id and text:
+                    posts.append({
+                        "id": str(post_id),
+                        "timestamp": timestamp,
+                        "text": text
+                    })
+            except Exception as e:
+                print(f"Error parsing post: {e}")
                 continue
-
-            post_id_raw = wrapper.get("id", "")
-            post_id = post_id_raw.replace("post-", "") if "post-" in post_id_raw else None
-
-            msg = article.find("div", class_="message")
-            if not msg:
-                continue
-            text = msg.get_text(strip=True)
-
-            ts_tag = article.find("abbr", class_="o-timestamp")
-            if not ts_tag:
-                continue
-
-            timestamp = int(ts_tag.get("data-timestamp", 0))
-
-            if post_id and timestamp and text:
-                posts.append({
-                    "id": str(post_id),
-                    "timestamp": timestamp,
-                    "text": text
-                })
-
-        except Exception as e:
-            continue
+    else:
+        # Strategy 3: dump debug info
+        print("DEBUG: No posts found with known selectors.")
+        print(f"DEBUG: All tag names in body: {set(tag.name for tag in soup.find_all(True)[:200])}")
+        all_classes = set()
+        for tag in soup.find_all(True, class_=True)[:200]:
+            for c in tag.get("class", []):
+                all_classes.add(c)
+        print(f"DEBUG: Classes found: {sorted(list(all_classes))[:50]}")
+        # Dump some visible text
+        body_text = soup.get_text(strip=True)[:1000]
+        print(f"DEBUG: Visible text: {body_text}")
 
     return posts
 
 
 # ---------------- RUN ----------------
 def run():
-
     posts = fetch_posts()
 
     print("TOTAL POSTS FOUND:", len(posts))
@@ -107,18 +178,16 @@ def run():
     seen = set(load_json(SEEN_FILE, []))
     last_run = load_json(LAST_RUN_FILE, 0)
 
-    # FIX: normalize timestamp to ms
     if last_run < 10**12:
         last_run = last_run * 1000
 
     new_posts = [
         p for p in posts
-        if p["id"] not in seen and int(p["timestamp"]) > int(last_run)
+        if p["id"] not in seen and (p["timestamp"] == 0 or int(p["timestamp"]) > int(last_run))
     ]
 
     print("NEW POSTS FOUND:", len(new_posts))
 
-    # ALWAYS update last run time even if empty
     now_ts = int(datetime.utcnow().timestamp() * 1000)
 
     if not new_posts:
@@ -140,7 +209,6 @@ def run():
 
     save_row("Liverpool", avg, len(new_posts))
 
-    # ALWAYS create latest post file
     save_json(LATEST_POST_FILE, {
         "text": latest["text"],
         "score": score_text(latest["text"]),
