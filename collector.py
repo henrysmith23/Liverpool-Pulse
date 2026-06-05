@@ -216,7 +216,8 @@ def run():
 
     save_json(LATEST_POST_FILE, {
         "author": latest.get("author", "Unknown"),
-        "text": latest["text"]
+        "text": latest["text"],
+        "score": score_text(latest["text"])
     })
 
 

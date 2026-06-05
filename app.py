@@ -51,3 +51,6 @@ if len(liverpool_data) > 1:
 if latest:
     st.subheader("Latest Post")
     st.write(f"**{latest.get('author', 'Unknown')}:** {latest.get('text', 'N/A')}")
+
+    st.subheader("Latest Post Sentiment")
+    st.write(f"{latest.get('score', 0):.1f} / 100")
