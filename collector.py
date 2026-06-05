@@ -127,6 +127,10 @@ def fetch_posts():
                 if not post_id:
                     continue
 
+                # Find author
+                author_tag = row.select_one("a.user-link, .author a, .post-author a, a[href*='/user/']")
+                author = author_tag.get_text(strip=True) if author_tag else "Unknown"
+
                 # Find message content
                 msg = row.select_one(".message, .post-body, .content, .post_content")
                 if not msg:
@@ -148,7 +152,8 @@ def fetch_posts():
                     posts.append({
                         "id": str(post_id),
                         "timestamp": timestamp,
-                        "text": text
+                        "text": text,
+                        "author": author
                     })
             except Exception as e:
                 print(f"Error parsing post: {e}")
@@ -210,9 +215,8 @@ def run():
     save_row("Liverpool", avg, len(new_posts))
 
     save_json(LATEST_POST_FILE, {
-        "text": latest["text"],
-        "score": score_text(latest["text"]),
-        "timestamp": latest["timestamp"]
+        "author": latest.get("author", "Unknown"),
+        "text": latest["text"]
     })
 
 

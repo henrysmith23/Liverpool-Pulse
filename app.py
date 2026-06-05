@@ -1,4 +1,8 @@
+# ABOUTME: Streamlit dashboard showing Liverpool fan sentiment trends.
+# ABOUTME: Displays hourly charts, current metrics, and the latest forum post.
+
 import streamlit as st
+import pandas as pd
 import json
 import os
 
@@ -32,11 +36,18 @@ if liverpool_data:
 else:
     st.info("Waiting for first Liverpool data run...")
 
+# ---------------- CHARTS ----------------
+if len(liverpool_data) > 1:
+    df = pd.DataFrame(liverpool_data)
+    df["timestamp"] = pd.to_datetime(df["timestamp"])
+
+    st.subheader("Sentiment Over Time")
+    st.line_chart(df.set_index("timestamp")["sentiment"])
+
+    st.subheader("Mentions Over Time")
+    st.line_chart(df.set_index("timestamp")["mentions"])
 
 # ---------------- LATEST POST ----------------
 if latest:
     st.subheader("Latest Post")
-    st.write(latest.get("text", "N/A"))
-
-    st.subheader("Latest Post Sentiment")
-    st.write(f"{latest.get('score', 0):.1f} / 100")
+    st.write(f"**{latest.get('author', 'Unknown')}:** {latest.get('text', 'N/A')}")
