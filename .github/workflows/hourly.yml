@@ -27,6 +27,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data.json latest_post.json
+          git add data.json
+          if [ -f latest_post.json ]; then git add latest_post.json; fi
           git commit -m "update pulse data" || echo "no changes"
           git push
