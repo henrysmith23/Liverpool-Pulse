@@ -21,10 +21,11 @@ def load_json(path):
 data = load_json(DATA_FILE) or []
 latest = load_json(LATEST_FILE)
 
+liverpool_data = [row for row in data if row["team"] == "Liverpool"]
 
 # ---------------- METRICS ----------------
-if data:
-    latest_row = data[-1]
+if liverpool_data:
+    latest_row = liverpool_data[-1]
 
     st.metric("Sentiment Score", f"{latest_row['sentiment']:.1f}")
     st.metric("Mentions (Last Hour)", latest_row["mentions"])

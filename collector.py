@@ -32,8 +32,33 @@ def save_json(path, data):
 
 
 # ---------------- SCRAPE ----------------
-def fetch_posts():
+def get_last_page_number():
     res = requests.get(THREAD_URL, headers=HEADERS, timeout=15)
+    soup = BeautifulSoup(res.text, "html.parser")
+
+    pagination = soup.find("ul", class_="ui-pagination")
+    if not pagination:
+        return 1
+
+    page_links = pagination.find_all("a")
+    max_page = 1
+    for link in page_links:
+        try:
+            num = int(link.get_text(strip=True))
+            if num > max_page:
+                max_page = num
+        except ValueError:
+            continue
+
+    return max_page
+
+
+def fetch_posts():
+    last_page = get_last_page_number()
+    url = f"{THREAD_URL}?page={last_page}"
+    print(f"Fetching page {last_page}: {url}")
+
+    res = requests.get(url, headers=HEADERS, timeout=15)
     soup = BeautifulSoup(res.text, "html.parser")
 
     posts = []
