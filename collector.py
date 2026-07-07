@@ -9,7 +9,7 @@ from datetime import datetime
 from sentiment import score_text
 from db import save_row
 
-THREAD_URL = "https://anfield.freeforums.net/thread/755/liverpool-season-iraola-officially-confirmed"
+THREAD_URL = "https://anfield.freeforums.net/thread/755/liverpool-season-richard-hughes-farce"
 
 SEEN_FILE = "seen_posts.json"
 LAST_RUN_FILE = "last_run.json"
