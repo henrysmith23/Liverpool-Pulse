@@ -1,7 +1,7 @@
 # ABOUTME: Scrapes the latest posts from the Liverpool forum thread.
 # ABOUTME: Calculates sentiment scores and saves results for the Streamlit dashboard.
 
-import cloudscraper
+from playwright.sync_api import sync_playwright
 from bs4 import BeautifulSoup
 import json
 import os
@@ -36,26 +36,35 @@ def save_json(path, data):
 # ---------------- SCRAPE ----------------
 MAX_RETRIES = 3
 
-scraper = cloudscraper.create_scraper(
-    browser={"browser": "chrome", "platform": "linux", "desktop": True}
-)
-
 
 def get_page_html(url):
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            resp = scraper.get(url, timeout=30)
-            resp.raise_for_status()
-            print(f"Fetched {url} ({len(resp.text)} chars)")
-            if len(resp.text) < 5000 and "JavaScript" in resp.text:
+            html = _fetch_page(url)
+            if len(html) < 5000 and "JavaScript" in html:
                 raise RuntimeError("Got Cloudflare challenge page, not real content")
-            return resp.text
+            return html
         except Exception as e:
             print(f"Attempt {attempt}/{MAX_RETRIES} failed: {e}")
             if attempt == MAX_RETRIES:
                 raise
-            time.sleep(5 * attempt)
+            time.sleep(10 * attempt)
     return ""
+
+
+def _fetch_page(url):
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.goto(url, wait_until="domcontentloaded", timeout=60000)
+        page.wait_for_timeout(10000)
+
+        html = page.content()
+        print(f"Fetched {url} ({len(html)} chars)")
+
+        browser.close()
+
+    return html
 
 
 def get_last_page_number():
