@@ -125,28 +125,74 @@ def fetch_posts():
             try:
                 post_id = row.get("data-post-id") or row.get("id", "").replace("post-", "")
                 if not post_id:
+                    import re as _re
+                    link = row.find("a", href=_re.compile(r"/post/(\d+)"))
+                    if link:
+                        match = _re.search(r"/post/(\d+)", link["href"])
+                        if match:
+                            post_id = match.group(1)
+                if not post_id:
                     continue
 
                 # Find author
-                author_tag = row.select_one("a.user-link, .author a, .post-author a, a[href*='/user/']")
+                author_tag = row.select_one(
+                    "a.user-link, a.username, .author a, .post-author a, a[href*='/user/']"
+                )
                 author = author_tag.get_text(strip=True) if author_tag else "Unknown"
 
                 # Find message content
-                msg = row.select_one(".message, .post-body, .content, .post_content")
+                msg = row.select_one(
+                    ".message, .post-body, .post-content, .content, .post_content"
+                )
                 if not msg:
-                    msg = row.find("div", class_=lambda c: c and "message" in c.lower()) if row.find("div") else None
+                    msg = row.find(
+                        "div",
+                        class_=lambda c: c and ("content" in c.lower() or "message" in c.lower()),
+                    )
+                if not msg:
+                    # Last resort: largest text block in the post container
+                    divs = row.find_all("div")
+                    longest = None
+                    longest_len = 0
+                    for d in divs:
+                        t = d.get_text(strip=True)
+                        if len(t) > longest_len:
+                            longest = d
+                            longest_len = len(t)
+                    if longest and longest_len > 20:
+                        msg = longest
                 if not msg:
                     continue
                 text = msg.get_text(strip=True)
 
                 # Find timestamp
-                ts_tag = row.select_one("abbr[data-timestamp], time[data-timestamp], span[data-timestamp]")
+                ts_tag = row.select_one(
+                    "abbr[data-timestamp], time[data-timestamp], span[data-timestamp]"
+                )
                 if not ts_tag:
                     ts_tag = row.find(attrs={"data-timestamp": True})
 
                 timestamp = 0
                 if ts_tag:
                     timestamp = int(ts_tag.get("data-timestamp", 0))
+
+                if timestamp == 0:
+                    # Parse text-based timestamp from .post-date or similar
+                    date_el = row.select_one(".post-date, .date, .time, .timestamp")
+                    if not date_el:
+                        date_el = row.find(
+                            lambda tag: tag.name in ("span", "time", "abbr")
+                            and tag.get_text(strip=True)
+                            and "202" in tag.get_text(strip=True)
+                        )
+                    if date_el:
+                        from dateutil import parser as dateparser
+                        try:
+                            dt = dateparser.parse(date_el.get_text(strip=True))
+                            if dt:
+                                timestamp = int(dt.timestamp() * 1000)
+                        except (ValueError, TypeError):
+                            pass
 
                 if post_id and text:
                     posts.append({
@@ -158,8 +204,19 @@ def fetch_posts():
             except Exception as e:
                 print(f"Error parsing post: {e}")
                 continue
-    else:
-        # Strategy 3: dump debug info
+    if post_rows and not posts:
+        # Posts containers found but no content extracted — log debug info
+        sample = post_rows[0]
+        print(f"DEBUG: Found {len(post_rows)} containers but extracted 0 posts.")
+        print(f"DEBUG: Sample container tag={sample.name}, id={sample.get('id')}, classes={sample.get('class')}")
+        inner_classes = set()
+        for tag in sample.find_all(True, class_=True)[:30]:
+            for c in tag.get("class", []):
+                inner_classes.add(c)
+        print(f"DEBUG: Inner classes in first post: {sorted(inner_classes)}")
+
+    if not post_rows:
+        # No containers found at all
         print("DEBUG: No posts found with known selectors.")
         print(f"DEBUG: All tag names in body: {set(tag.name for tag in soup.find_all(True)[:200])}")
         all_classes = set()
@@ -167,7 +224,6 @@ def fetch_posts():
             for c in tag.get("class", []):
                 all_classes.add(c)
         print(f"DEBUG: Classes found: {sorted(list(all_classes))[:50]}")
-        # Dump some visible text
         body_text = soup.get_text(strip=True)[:1000]
         print(f"DEBUG: Visible text: {body_text}")
 
