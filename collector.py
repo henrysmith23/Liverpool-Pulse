@@ -1,7 +1,7 @@
 # ABOUTME: Scrapes the latest posts from the Liverpool forum thread.
 # ABOUTME: Calculates sentiment scores and saves results for the Streamlit dashboard.
 
-import requests
+import cloudscraper
 from bs4 import BeautifulSoup
 import json
 import os
@@ -36,19 +36,19 @@ def save_json(path, data):
 # ---------------- SCRAPE ----------------
 MAX_RETRIES = 3
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9",
-}
+scraper = cloudscraper.create_scraper(
+    browser={"browser": "chrome", "platform": "linux", "desktop": True}
+)
 
 
 def get_page_html(url):
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            resp = requests.get(url, headers=HEADERS, timeout=30)
+            resp = scraper.get(url, timeout=30)
             resp.raise_for_status()
             print(f"Fetched {url} ({len(resp.text)} chars)")
+            if len(resp.text) < 5000 and "JavaScript" in resp.text:
+                raise RuntimeError("Got Cloudflare challenge page, not real content")
             return resp.text
         except Exception as e:
             print(f"Attempt {attempt}/{MAX_RETRIES} failed: {e}")

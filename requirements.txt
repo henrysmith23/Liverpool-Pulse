@@ -2,5 +2,5 @@ streamlit
 pandas
 beautifulsoup4
 vaderSentiment
-requests
+cloudscraper
 python-dateutil
