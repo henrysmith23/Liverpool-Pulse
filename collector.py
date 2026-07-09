@@ -1,10 +1,11 @@
-# ABOUTME: Scrapes the latest posts from the Liverpool forum thread using Playwright.
+# ABOUTME: Scrapes the latest posts from the Liverpool forum thread.
 # ABOUTME: Calculates sentiment scores and saves results for the Streamlit dashboard.
 
-from playwright.sync_api import sync_playwright
+import requests
 from bs4 import BeautifulSoup
 import json
 import os
+import time
 from datetime import datetime
 from sentiment import score_text
 from db import save_row
@@ -35,45 +36,26 @@ def save_json(path, data):
 # ---------------- SCRAPE ----------------
 MAX_RETRIES = 3
 
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+
 
 def get_page_html(url):
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            return _fetch_page(url)
+            resp = requests.get(url, headers=HEADERS, timeout=30)
+            resp.raise_for_status()
+            print(f"Fetched {url} ({len(resp.text)} chars)")
+            return resp.text
         except Exception as e:
             print(f"Attempt {attempt}/{MAX_RETRIES} failed: {e}")
             if attempt == MAX_RETRIES:
                 raise
-            import time
             time.sleep(5 * attempt)
     return ""
-
-
-def _fetch_page(url):
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        context = browser.new_context(
-            user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-            viewport={"width": 1920, "height": 1080},
-            extra_http_headers={
-                "Accept-Language": "en-US,en;q=0.9",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            },
-        )
-        page = context.new_page()
-
-        page.goto(url, wait_until="domcontentloaded", timeout=90000)
-        page.wait_for_timeout(10000)
-
-        html = page.content()
-        title = page.title()
-
-        print(f"Page title: {title}")
-        print(f"HTML length: {len(html)}")
-
-        browser.close()
-
-    return html
 
 
 def get_last_page_number():

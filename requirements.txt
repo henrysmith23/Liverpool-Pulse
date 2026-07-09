@@ -2,5 +2,5 @@ streamlit
 pandas
 beautifulsoup4
 vaderSentiment
-playwright
+requests
 python-dateutil
