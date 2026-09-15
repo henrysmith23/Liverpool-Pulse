@@ -289,8 +289,15 @@
         "conceded": 0,
         "cum_scored": 6,
         "cum_conceded": 4
+      },
+      {
+        "matchweek": 4,
+        "scored": 0,
+        "conceded": 0,
+        "cum_scored": 6,
+        "cum_conceded": 4
       }
     ]
   },
-  "last_updated": "2026-09-08T13:40:16.581796+00:00"
+  "last_updated": "2026-09-15T14:20:59.221397+00:00"
 }
